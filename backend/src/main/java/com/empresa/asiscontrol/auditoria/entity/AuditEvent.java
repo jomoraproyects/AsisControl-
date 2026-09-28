@@ -19,10 +19,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.Immutable;
 import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "auditoria")
+@Immutable
 public class AuditEvent {
 
     @Id

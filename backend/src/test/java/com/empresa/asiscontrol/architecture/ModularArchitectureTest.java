@@ -30,5 +30,24 @@ class ModularArchitectureTest {
     static final ArchRule repositoriesAreDomainLocal = classes()
             .that().haveSimpleNameEndingWith("Repository")
             .should().resideInAPackage("..repository..");
-}
 
+    @ArchTest
+    static final ArchRule phase2ModulesUsePublicServicesAcrossDomains = noClasses()
+            .that().resideInAnyPackage("..areas..", "..cargos..", "..empleados..",
+                    "..supervisores..", "..cuadrillas..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "..usuarios.repository..", "..roles.repository..", "..auth.repository..",
+                    "..auditoria.repository..");
+
+    @ArchTest
+    static final ArchRule employeeModuleDoesNotReadOtherPhase2Repositories = noClasses()
+            .that().resideInAPackage("..empleados..")
+            .should().dependOnClassesThat().resideInAnyPackage(
+                    "..areas.repository..", "..cargos.repository..",
+                    "..supervisores.repository..", "..cuadrillas.repository..");
+
+    @ArchTest
+    static final ArchRule crewAndSupervisorModulesDoNotReadEmployeeRepository = noClasses()
+            .that().resideInAnyPackage("..supervisores..", "..cuadrillas..")
+            .should().dependOnClassesThat().resideInAPackage("..empleados.repository..");
+}

@@ -15,6 +15,8 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     Optional<Usuario> findByNombreUsuarioNormalizado(String nombreUsuarioNormalizado);
 
     Optional<Usuario> findByPublicId(UUID publicId);
+    Optional<Usuario> findByEmpleadoId(Long empleadoId);
+    boolean existsByEmpleadoId(Long empleadoId);
 
     boolean existsByNombreUsuarioNormalizado(String nombreUsuarioNormalizado);
 
@@ -29,4 +31,3 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
             """)
     List<Usuario> bloquearUsuariosActivosConRol(@Param("codigo") String codigo);
 }
-

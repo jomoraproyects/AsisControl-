@@ -1,6 +1,6 @@
 # AsisControl
 
-Software de control de asistencia del personal de Serviciudad. Se desarrolla como monolito modular por fases; actualmente contiene únicamente la **Fase 1: plataforma e identidad**.
+Software de control de asistencia del personal de Serviciudad. Se desarrolla como monolito modular por fases; contiene la **Fase 1: plataforma e identidad** y la **Fase 2: estructura organizacional**.
 
 ## Requisitos
 
@@ -32,7 +32,7 @@ Software de control de asistencia del personal de Serviciudad. Se desarrolla com
    .\mvnw.cmd verify
    ```
 
-Las pruebas de integración requieren Docker porque usan MySQL 8.4 con Testcontainers.
+Las pruebas de integración usan MySQL 8.4 con Testcontainers cuando Docker está disponible. También pueden ejecutarse sobre una instancia MySQL local aislada; consulte [la ficha técnica de Fase 2](docs/FASE_2_FICHA_TECNICA.md).
 
 ## Bootstrap seguro
 

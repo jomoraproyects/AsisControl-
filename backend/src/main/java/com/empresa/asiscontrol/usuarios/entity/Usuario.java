@@ -39,6 +39,9 @@ public class Usuario {
     @Column(name = "password_hash", nullable = false, length = 255)
     private String passwordHash;
 
+    @Column(name = "empleado_id", unique = true)
+    private Long empleadoId;
+
     @Column(nullable = false)
     private boolean activo;
 
@@ -125,6 +128,11 @@ public class Usuario {
         this.actualizadoEn = ahora;
     }
 
+    public void vincularEmpleado(Long nuevoEmpleadoId, Instant ahora) {
+        this.empleadoId = nuevoEmpleadoId;
+        invalidarAutorizacion(ahora);
+    }
+
     public Long getId() { return id; }
     public UUID getPublicId() { return publicId; }
     public String getNombreUsuario() { return nombreUsuario; }
@@ -132,6 +140,7 @@ public class Usuario {
     public String getCorreo() { return correo; }
     public String getCorreoNormalizado() { return correoNormalizado; }
     public String getPasswordHash() { return passwordHash; }
+    public Long getEmpleadoId() { return empleadoId; }
     public boolean isActivo() { return activo; }
     public boolean isDebeCambiarPassword() { return debeCambiarPassword; }
     public long getAuthVersion() { return authVersion; }
@@ -139,4 +148,3 @@ public class Usuario {
     public Instant getCreadoEn() { return creadoEn; }
     public Instant getActualizadoEn() { return actualizadoEn; }
 }
-

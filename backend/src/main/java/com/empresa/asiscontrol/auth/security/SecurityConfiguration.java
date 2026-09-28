@@ -70,7 +70,9 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/v1/auth/session", "/api/v1/auth/logout",
                                 "/api/v1/auth/password").authenticated()
                         .requestMatchers("/api/v1/usuarios/**", "/api/v1/roles/**",
-                                "/api/v1/auditoria/**").authenticated()
+                                "/api/v1/auditoria/**", "/api/v1/areas/**", "/api/v1/cargos/**",
+                                "/api/v1/empleados/**", "/api/v1/supervisores/**",
+                                "/api/v1/cuadrillas/**").authenticated()
                         .anyRequest().denyAll())
                 .addFilterAfter(authorizationVersionFilter, SecurityContextHolderFilter.class);
         return http.build();

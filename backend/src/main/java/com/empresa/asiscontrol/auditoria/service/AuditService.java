@@ -6,6 +6,7 @@ import com.empresa.asiscontrol.auditoria.entity.AuditOutcome;
 import com.empresa.asiscontrol.auditoria.repository.AuditEventRepository;
 import com.empresa.asiscontrol.shared.web.RequestMetadata;
 import com.empresa.asiscontrol.usuarios.entity.Usuario;
+import jakarta.persistence.EntityManager;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
@@ -18,10 +19,28 @@ public class AuditService {
 
     private final AuditEventRepository repository;
     private final Clock clock;
+    private final EntityManager entityManager;
 
-    public AuditService(AuditEventRepository repository, Clock clock) {
+    public AuditService(AuditEventRepository repository, Clock clock, EntityManager entityManager) {
         this.repository = repository;
         this.clock = clock;
+        this.entityManager = entityManager;
+    }
+
+    @Transactional
+    public void recordByUserId(Long userId, String actor, AuditAction action, String entity,
+                               String entityId, Map<String, Object> before, Map<String, Object> after,
+                               Map<String, Object> details, RequestMetadata metadata) {
+        Usuario user = entityManager.getReference(Usuario.class, userId);
+        record(user, actor, action, AuditOutcome.EXITOSO, entity, entityId, before, after, details, metadata);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordDenied(Long userId, String actor, String endpoint, String method,
+                             RequestMetadata metadata) {
+        Usuario user = userId == null ? null : entityManager.getReference(Usuario.class, userId);
+        repository.save(AuditEvent.crear(user, actor, AuditAction.ACCESO_DENEGADO, AuditOutcome.FALLIDO,
+                "ENDPOINT", endpoint, null, null, Map.of("method", method), clock.instant(), metadata));
     }
 
     @Transactional

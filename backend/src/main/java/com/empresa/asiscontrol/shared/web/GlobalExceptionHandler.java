@@ -1,6 +1,8 @@
 package com.empresa.asiscontrol.shared.web;
 
 import com.empresa.asiscontrol.shared.exception.DomainException;
+import com.empresa.asiscontrol.auditoria.service.AuditService;
+import com.empresa.asiscontrol.auth.security.AsisUserPrincipal;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
 import java.util.List;
@@ -11,6 +13,11 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -19,6 +26,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private final AuditService audit;
+    private final RequestMetadataProvider metadataProvider;
+
+    public GlobalExceptionHandler(AuditService audit, RequestMetadataProvider metadataProvider) {
+        this.audit = audit;
+        this.metadataProvider = metadataProvider;
+    }
 
     @ExceptionHandler(DomainException.class)
     ProblemDetail handleDomain(DomainException exception, HttpServletRequest request) {
@@ -41,6 +55,24 @@ public class GlobalExceptionHandler {
     ProblemDetail handleMalformed(Exception exception, HttpServletRequest request) {
         return base(HttpStatus.BAD_REQUEST, "MALFORMED_REQUEST",
                 "La solicitud no tiene un formato válido", request);
+    }
+
+    @ExceptionHandler({DataIntegrityViolationException.class, ObjectOptimisticLockingFailureException.class})
+    ProblemDetail handleConflict(Exception exception, HttpServletRequest request) {
+        return base(HttpStatus.CONFLICT, "CONFLICTO_CONCURRENTE",
+                "La operación entra en conflicto con un registro o cambio concurrente", request);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    ProblemDetail handleDenied(AccessDeniedException exception, HttpServletRequest request) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        AsisUserPrincipal principal = authentication != null
+                && authentication.getPrincipal() instanceof AsisUserPrincipal p ? p : null;
+        audit.recordDenied(principal == null ? null : principal.userId(),
+                principal == null ? null : principal.getUsername(), request.getRequestURI(),
+                request.getMethod(), metadataProvider.from(request));
+        return base(HttpStatus.FORBIDDEN, "ACCESS_DENIED",
+                "No tiene permiso para realizar esta operación", request);
     }
 
     @ExceptionHandler(Exception.class)

@@ -9,6 +9,7 @@ public record UserResponse(
         UUID id,
         String username,
         String email,
+        Long empleadoId,
         boolean active,
         boolean passwordChangeRequired,
         Set<String> roles,
@@ -16,8 +17,8 @@ public record UserResponse(
         Instant updatedAt) {
 
     public static UserResponse from(Usuario user, Set<String> roles) {
-        return new UserResponse(user.getPublicId(), user.getNombreUsuario(), user.getCorreo(), user.isActivo(),
+        return new UserResponse(user.getPublicId(), user.getNombreUsuario(), user.getCorreo(),
+                user.getEmpleadoId(), user.isActivo(),
                 user.isDebeCambiarPassword(), Set.copyOf(roles), user.getCreadoEn(), user.getActualizadoEn());
     }
 }
-

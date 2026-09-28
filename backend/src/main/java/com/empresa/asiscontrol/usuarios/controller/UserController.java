@@ -4,6 +4,7 @@ import com.empresa.asiscontrol.auth.security.AsisUserPrincipal;
 import com.empresa.asiscontrol.roles.Permisos;
 import com.empresa.asiscontrol.shared.web.RequestMetadataProvider;
 import com.empresa.asiscontrol.usuarios.dto.CreateUserRequest;
+import com.empresa.asiscontrol.usuarios.dto.LinkEmployeeRequest;
 import com.empresa.asiscontrol.usuarios.dto.TemporaryPasswordResponse;
 import com.empresa.asiscontrol.usuarios.dto.UpdateUserRequest;
 import com.empresa.asiscontrol.usuarios.dto.UserResponse;
@@ -85,6 +86,20 @@ public class UserController {
         return service.revokeRole(id, roleCode, actor, metadataProvider.from(request));
     }
 
+    @PostMapping("/{id}/empleado")
+    @PreAuthorize("hasAuthority('" + Permisos.USUARIO_MODIFICAR + "')")
+    public UserResponse linkEmployee(@PathVariable UUID id, @Valid @RequestBody LinkEmployeeRequest input,
+            @AuthenticationPrincipal AsisUserPrincipal actor, HttpServletRequest request) {
+        return service.linkEmployee(id, input.empleadoId(), actor, metadataProvider.from(request));
+    }
+
+    @DeleteMapping("/{id}/empleado")
+    @PreAuthorize("hasAuthority('" + Permisos.USUARIO_MODIFICAR + "')")
+    public UserResponse unlinkEmployee(@PathVariable UUID id,
+            @AuthenticationPrincipal AsisUserPrincipal actor, HttpServletRequest request) {
+        return service.unlinkEmployee(id, actor, metadataProvider.from(request));
+    }
+
     @PostMapping("/{id}/restablecer-password")
     @PreAuthorize("hasAuthority('" + Permisos.USUARIO_MODIFICAR + "')")
     public TemporaryPasswordResponse resetPassword(@PathVariable UUID id,
@@ -93,4 +108,3 @@ public class UserController {
         return new TemporaryPasswordResponse(service.resetPassword(id, actor, metadataProvider.from(request)));
     }
 }
-

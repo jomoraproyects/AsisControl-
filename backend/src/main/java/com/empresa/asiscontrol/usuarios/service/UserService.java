@@ -49,12 +49,14 @@ public class UserService {
     private final MfaService mfaService;
     private final AuditService auditService;
     private final Clock clock;
+    private final UserLinkService links;
     private final SecureRandom secureRandom = new SecureRandom();
 
     public UserService(UsuarioRepository usuarioRepository, RolRepository rolRepository,
                        UsuarioRolRepository usuarioRolRepository, PasswordEncoder passwordEncoder,
                        PasswordPolicyService passwordPolicy, SessionRevocationService sessions,
-                       MfaService mfaService, AuditService auditService, Clock clock) {
+                       MfaService mfaService, AuditService auditService, Clock clock,
+                       UserLinkService links) {
         this.usuarioRepository = usuarioRepository;
         this.rolRepository = rolRepository;
         this.usuarioRolRepository = usuarioRolRepository;
@@ -64,6 +66,7 @@ public class UserService {
         this.mfaService = mfaService;
         this.auditService = auditService;
         this.clock = clock;
+        this.links = links;
     }
 
     @Transactional(readOnly = true)
@@ -74,9 +77,9 @@ public class UserService {
     @Transactional
     public UserResponse create(CreateUserRequest input, AsisUserPrincipal actor, RequestMetadata metadata) {
         Usuario actorEntity = requireUser(actor.publicId());
-        validateAssignableRoles(input.roles());
+        validateAssignableRoles(input.roles(), input.empleadoId());
         return createInternal(input.username(), input.email(), input.password(), input.roles(), actorEntity,
-                actor.getUsername(), metadata);
+                actor.getUsername(), metadata, input.empleadoId());
     }
 
     @Transactional
@@ -86,7 +89,7 @@ public class UserService {
                     "El bootstrap sólo puede ejecutarse cuando no existe ningún usuario");
         }
         UserResponse response = createInternal(username, email, password, Set.of(Roles.SUPER_ADMIN),
-                null, "SERVER_BOOTSTRAP", metadata);
+                null, "SERVER_BOOTSTRAP", metadata, null);
         return requireUser(response.id());
     }
 
@@ -140,8 +143,8 @@ public class UserService {
     public UserResponse assignRole(UUID publicId, String roleCode, AsisUserPrincipal actor,
                                    RequestMetadata metadata) {
         String normalizedRole = roleCode.trim().toUpperCase();
-        validateAssignableRoles(Set.of(normalizedRole));
         Usuario target = requireUser(publicId);
+        validateAssignableRoles(Set.of(normalizedRole), target.getEmpleadoId());
         Usuario actorEntity = requireUser(actor.publicId());
         if (usuarioRolRepository.findByUsuarioIdAndRolCodigoAndRevocadoEnIsNull(target.getId(), normalizedRole)
                 .isPresent()) {
@@ -211,6 +214,42 @@ public class UserService {
     }
 
     @Transactional
+    public UserResponse linkEmployee(UUID publicId, Long employeeId, AsisUserPrincipal actor,
+                                     RequestMetadata metadata) {
+        Usuario target = requireUser(publicId);
+        if (usuarioRepository.existsByEmpleadoId(employeeId) && !employeeId.equals(target.getEmpleadoId()))
+            throw new ConflictException("EMPLOYEE_ALREADY_LINKED", "El empleado ya está vinculado a un usuario");
+        Set<String> roles = usuarioRolRepository.findByUsuarioIdAndRevocadoEnIsNull(target.getId()).stream()
+                .map(row -> row.getRol().getCodigo()).collect(java.util.stream.Collectors.toSet());
+        links.validateRolesForEmployee(employeeId, roles);
+        Long before = target.getEmpleadoId();
+        target.vincularEmpleado(employeeId, clock.instant());
+        sessions.revokeAll(target.getNombreUsuario());
+        auditService.record(requireUser(actor.publicId()), actor.getUsername(), AuditAction.MODIFICAR_USUARIO,
+                AuditOutcome.EXITOSO, "USUARIO", publicId.toString(),
+                Map.of("empleadoId", before == null ? "SIN_VINCULO" : before),
+                Map.of("empleadoId", employeeId), Map.of("operation", "LINK_EMPLOYEE"), metadata);
+        return response(target);
+    }
+
+    @Transactional
+    public UserResponse unlinkEmployee(UUID publicId, AsisUserPrincipal actor, RequestMetadata metadata) {
+        Usuario target = requireUser(publicId);
+        Set<String> roles = usuarioRolRepository.findByUsuarioIdAndRevocadoEnIsNull(target.getId()).stream()
+                .map(row -> row.getRol().getCodigo()).collect(java.util.stream.Collectors.toSet());
+        if (roles.contains(Roles.SUPERVISOR) || roles.contains(Roles.CONDUCTOR))
+            throw new ConflictException("EMPLOYEE_LINK_REQUIRED", "Revocar primero el rol operativo");
+        Long before = target.getEmpleadoId();
+        if (before == null) return response(target);
+        target.vincularEmpleado(null, clock.instant());
+        sessions.revokeAll(target.getNombreUsuario());
+        auditService.record(requireUser(actor.publicId()), actor.getUsername(), AuditAction.MODIFICAR_USUARIO,
+                AuditOutcome.EXITOSO, "USUARIO", publicId.toString(), Map.of("empleadoId", before),
+                Map.of("empleadoId", "SIN_VINCULO"), Map.of("operation", "UNLINK_EMPLOYEE"), metadata);
+        return response(target);
+    }
+
+    @Transactional
     public void recoverSuperAdmin(String username, String password, boolean resetMfa,
                                   RequestMetadata metadata) {
         Usuario user = usuarioRepository.findByNombreUsuarioNormalizado(TextNormalizer.identifier(username))
@@ -234,7 +273,7 @@ public class UserService {
     }
 
     private UserResponse createInternal(String username, String email, String password, Set<String> roleCodes,
-                                        Usuario actor, String actorName, RequestMetadata metadata) {
+                                        Usuario actor, String actorName, RequestMetadata metadata, Long employeeId) {
         String normalizedUsername = TextNormalizer.identifier(username);
         String normalizedEmail = TextNormalizer.optionalIdentifier(email);
         if (usuarioRepository.existsByNombreUsuarioNormalizado(normalizedUsername)) {
@@ -245,8 +284,10 @@ public class UserService {
         }
         passwordPolicy.validate(password, username);
         Instant now = clock.instant();
-        Usuario user = usuarioRepository.save(Usuario.crear(username.trim(), normalizedUsername,
-                blankToNull(email), normalizedEmail, passwordEncoder.encode(password), now));
+        Usuario user = Usuario.crear(username.trim(), normalizedUsername,
+                blankToNull(email), normalizedEmail, passwordEncoder.encode(password), now);
+        if (employeeId != null) user.vincularEmpleado(employeeId, now);
+        user = usuarioRepository.save(user);
         List<String> normalizedRoles = roleCodes.stream().map(value -> value.trim().toUpperCase()).sorted().toList();
         for (String code : normalizedRoles) {
             Rol role = rolRepository.findByCodigo(code)
@@ -262,16 +303,13 @@ public class UserService {
         return response(user);
     }
 
-    private void validateAssignableRoles(Set<String> roleCodes) {
+    private void validateAssignableRoles(Set<String> roleCodes, Long employeeId) {
         Set<String> normalized = new LinkedHashSet<>();
         roleCodes.forEach(value -> normalized.add(value.trim().toUpperCase()));
         if (!Roles.PROTEGIDOS.containsAll(normalized)) {
             throw new NotFoundException("ROLE_NOT_FOUND", "Sólo existen los cuatro roles base protegidos");
         }
-        if (!Roles.ASIGNABLES_FASE_1.containsAll(normalized)) {
-            throw new ConflictException("EMPLOYEE_LINK_REQUIRED",
-                    "SUPERVISOR y CONDUCTOR se asignarán en Fase 2 junto con su vínculo obligatorio a empleado");
-        }
+        links.validateRolesForEmployee(employeeId, normalized);
     }
 
     private void protectLastSuperAdmin(Usuario target) {
@@ -316,4 +354,3 @@ public class UserService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 }
-

@@ -76,8 +76,9 @@ class AuthenticationIntegrationTest extends MySqlIntegrationTest {
     void sesionExpiradaNoPuedeReutilizarse() throws Exception {
         Usuario user = createReadyUser("expira", PASSWORD, Roles.CONDUCTOR);
         Cookie cookie = requireSessionCookie(login(user.getNombreUsuario(), PASSWORD, "AUTHENTICATED"));
-        jdbcTemplate.update("UPDATE SPRING_SESSION SET EXPIRY_TIME = 0 WHERE PRINCIPAL_NAME = ?",
-                user.getNombreUsuario());
+        org.assertj.core.api.Assertions.assertThat(jdbcTemplate.update(
+                "UPDATE SPRING_SESSION SET LAST_ACCESS_TIME = 0, MAX_INACTIVE_INTERVAL = 1, EXPIRY_TIME = 1 " +
+                "WHERE PRINCIPAL_NAME = ?", user.getNombreUsuario())).isEqualTo(1);
 
         mockMvc.perform(get("/api/v1/auth/session").cookie(cookie))
                 .andExpect(status().isUnauthorized());
@@ -101,4 +102,3 @@ class AuthenticationIntegrationTest extends MySqlIntegrationTest {
     private record Credentials(String username, String password) {
     }
 }
-
